@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart3, ShieldCheck, GraduationCap, HeartPulse, Wallet, Clock } from "lucide-react";
-import { ProofOfApplicationQR, type ApplicationRecord } from "@/components/proof-of-application-qr";
+import { ProofOfApplicationIphone, type ApplicationRecord } from "@/components/proof-of-application-iphone";
 
 const agents = [
   { icon: ShieldCheck, label: "Legal Assistant (Lex)", value: "Activating" },
@@ -12,8 +12,6 @@ const agents = [
   { icon: Wallet, label: "Credit Assistant (Rex)", value: "Activating" },
 ];
 
-// TODO: replace with real records pulled from the user's vault_entries once
-// the post-activation dashboard is wired to the backend.
 const demoRecords: ApplicationRecord[] = [
   { type: "Section 22 Permit Renewal", appliedOn: "2026-03-14", status: "Under Review", reference: "HA-22841" },
   { type: "NSFAS Bursary Application", appliedOn: "2026-04-02", status: "Submitted" },
@@ -29,7 +27,7 @@ export default function JourneyPage() {
             <div className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Your workspace</div>
             <h1 className="mt-4 text-4xl lg:text-6xl font-display tracking-tight">Your Journey</h1>
             <p className="mt-4 text-xl text-muted-foreground max-w-2xl">
-              Technology Made For Real People. Your agents activate within 24 hours of payment confirmation.
+              Technology made for real people. Your assistants activate within 24 hours of payment confirmation.
             </p>
           </div>
         </div>
@@ -40,7 +38,6 @@ export default function JourneyPage() {
               <BarChart3 className="w-5 h-5 text-foreground" />
               <h2 className="text-xl font-display">Assistant Status</h2>
             </div>
-
             <div className="mt-6 grid sm:grid-cols-2 gap-4">
               {agents.map((a) => {
                 const Icon = a.icon;
@@ -64,14 +61,13 @@ export default function JourneyPage() {
                 );
               })}
             </div>
-
             <div className="mt-6 rounded-xl border border-foreground/10 p-4 bg-background">
               <div className="flex items-start gap-4">
                 <Clock className="w-6 h-6 text-foreground/80 mt-0.5" />
                 <div>
                   <div className="text-sm font-medium">Awaiting Payment Confirmation</div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    Once we confirm your R300 payment, your agents activate and your personal journey dashboard goes live within 24 hours.
+                    Once we confirm your R300 payment, your assistants activate within 24 hours.
                   </div>
                 </div>
               </div>
@@ -83,7 +79,6 @@ export default function JourneyPage() {
               <ShieldCheck className="w-5 h-5 text-foreground" />
               <h2 className="text-xl font-display">What unlocks after activation</h2>
             </div>
-
             <div className="mt-6 space-y-4">
               {[
                 "Legal guidance — visas, permits, your rights",
@@ -101,23 +96,19 @@ export default function JourneyPage() {
                 </div>
               ))}
             </div>
-
             <div className="mt-8">
               <Button asChild className="w-full bg-foreground hover:bg-foreground/90 text-background rounded-full">
-                <Link href="/activate#get-access">
+                <Link href="/activate">
                   Complete Payment — R300
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Pay via EFT to FNB — Account: Tina Ngoy — 63067960048. Use your reference number.
-              </p>
             </div>
           </section>
         </div>
 
-        <div className="mt-6">
-          <ProofOfApplicationQR holderName="Khaya" records={demoRecords} />
+        <div className="mt-10 rounded-2xl border border-foreground/10 bg-background p-6 lg:p-8">
+          <ProofOfApplicationIphone holderName="Khaya" records={demoRecords} />
         </div>
       </div>
     </main>
