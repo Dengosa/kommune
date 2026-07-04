@@ -6,7 +6,8 @@ import { Menu, X } from "lucide-react";
 
 const navLinks = [
   { name: "Home", href: "/" },
-  { name: "Journey", href: "/journey" },
+  { name: "Manifesto", href: "#features" },
+  { name: "Research", href: "#how-it-works" },
 ];
 
 export function Navigation() {
@@ -148,6 +149,7 @@ export function Navigation() {
     </header>
   );
 }
+
 
 
 
