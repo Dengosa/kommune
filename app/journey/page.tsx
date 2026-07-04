@@ -1,3 +1,33 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { Shield, CheckCircle, Circle, Clock, QrCode, FileText, Brain } from "lucide-react";
+import QRCode from "qrcode";
+
+
+
+const timeline = [
+  { label: "Initial Application", done: true },
+  { label: "Home Affairs Receipt Uploaded", done: true },
+  { label: "Interview Completed", done: true },
+  { label: "Awaiting Decision", active: true },
+  { label: "Journey Complete", done: false },
+];
+
+const documents = [
+  { name: "Home Affairs Receipt", date: "2026-01-14" },
+  { name: "Asylum Seeker Permit", date: "2026-01-15" },
+  { name: "Interview Appointment Letter", date: "2026-03-02" },
+  { name: "Supporting Affidavit", date: "2026-03-10" },
+];
+
+const features = [
+  { icon: Shield, title: "Secure Vault", desc: "Encrypted storage for permits, receipts, letters and important records." },
+  { icon: Clock, title: "Living Journey", desc: "See every milestone from application through final outcome." },
+  { icon: Brain, title: "Intelligent Guidance", desc: "AI explains what every document means and recommends your next step." },
+  { icon: QrCode, title: "Private QR Profile", desc: "Generate a secure QR that shares only the information you choose." },
+];
 
 function IphoneMockup() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -136,3 +166,5 @@ export default function JourneyPage() {
     </main>
   );
 }
+
+
