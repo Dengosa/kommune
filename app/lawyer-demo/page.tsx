@@ -171,7 +171,7 @@ export default function LawyerDemoPage() {
         width: "100%",
         maxWidth: 480,
         margin: "0 auto",
-        background: "#ffffff",
+        background: "#0a1a33",
         display: "flex",
         flexDirection: "column",
         fontFamily: "system-ui, -apple-system, sans-serif",
@@ -203,7 +203,7 @@ export default function LawyerDemoPage() {
 
       {/* Status row */}
       <div style={{ display: "flex", justifyContent: "flex-end", padding: "16px 20px 0" }}>
-        <div onClick={() => setShowSettings((s) => !s)} style={{ fontSize: 22, color: "#999", padding: 8 }}>
+        <div onClick={() => setShowSettings((s) => !s)} style={{ fontSize: 22, color: "#7ba8dd", padding: 8 }}>
           ⚙
         </div>
       </div>
@@ -212,13 +212,13 @@ export default function LawyerDemoPage() {
         <div
           style={{
             margin: "0 20px",
-            background: "#f7f7f7",
-            border: "1px solid #eee",
+            background: "#122a4f",
+            border: "1px solid #1e3a63",
             borderRadius: 12,
             padding: 14,
           }}
         >
-          <label style={{ fontSize: 12, color: "#999", display: "block", marginBottom: 6 }}>
+          <label style={{ fontSize: 12, color: "#8fb0dd", display: "block", marginBottom: 6 }}>
             WhatsApp number for this demo
           </label>
           <input
@@ -230,7 +230,9 @@ export default function LawyerDemoPage() {
               width: "100%",
               padding: "10px 12px",
               borderRadius: 8,
-              border: "1px solid #ddd",
+              border: "1px solid #2a4a7a",
+              background: "#0d2140",
+              color: "#f0f4fa",
               fontSize: 16,
             }}
           />
@@ -283,7 +285,7 @@ export default function LawyerDemoPage() {
             height: 64,
             borderRadius: "50%",
             border: "none",
-            background: "#f0f0f0",
+            background: "#122a4f",
             fontSize: 26,
             cursor: phase === "idle" ? "pointer" : "default",
           }}
@@ -291,7 +293,7 @@ export default function LawyerDemoPage() {
           🎙️
         </button>
 
-        <div style={{ width: 100, height: 4, background: "#ddd", borderRadius: 2 }} />
+        <div style={{ width: 100, height: 4, background: "#2a4a7a", borderRadius: 2 }} />
 
         <button
           onClick={stopSession}
@@ -300,7 +302,7 @@ export default function LawyerDemoPage() {
             height: 64,
             borderRadius: "50%",
             border: "none",
-            background: "#f0f0f0",
+            background: "#122a4f",
             fontSize: 22,
             cursor: "pointer",
           }}
