@@ -21,7 +21,7 @@ export default function LawyerDemoPage() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [demoPhone, setDemoPhone] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
+  const [phoneConfirmed, setPhoneConfirmed] = useState(false);
 
   const [whatsappStatus, setWhatsappStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
@@ -171,7 +171,7 @@ export default function LawyerDemoPage() {
         width: "100%",
         maxWidth: 480,
         margin: "0 auto",
-        background: "#0a1a33",
+        background: "radial-gradient(circle at 50% 30%, #1a2f5c 0%, #0a1a33 55%, #050d1c 100%)",
         display: "flex",
         flexDirection: "column",
         fontFamily: "system-ui, -apple-system, sans-serif",
@@ -201,45 +201,13 @@ export default function LawyerDemoPage() {
         }
       `}</style>
 
-      {/* Status row */}
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "16px 20px 0" }}>
-        <div onClick={() => setShowSettings((s) => !s)} style={{ fontSize: 22, color: "#7ba8dd", padding: 8 }}>
-          ⚙
-        </div>
+      {/* Header — title/subtitle, matching the reference layout's top text */}
+      <div style={{ padding: "28px 20px 0", textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#f0f4fa" }}>Kommune</div>
+        <div style={{ fontSize: 13, color: "#7ba8dd", marginTop: 4 }}>Live Voice Demo</div>
       </div>
 
-      {showSettings && (
-        <div
-          style={{
-            margin: "0 20px",
-            background: "#122a4f",
-            border: "1px solid #1e3a63",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <label style={{ fontSize: 12, color: "#8fb0dd", display: "block", marginBottom: 6 }}>
-            WhatsApp number for this demo
-          </label>
-          <input
-            value={demoPhone}
-            onChange={(e) => setDemoPhone(e.target.value)}
-            placeholder="27821234567"
-            inputMode="numeric"
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #2a4a7a",
-              background: "#0d2140",
-              color: "#f0f4fa",
-              fontSize: 16,
-            }}
-          />
-        </div>
-      )}
-
-      {/* Orb — the full-screen focal point */}
+      {/* Orb — the full-screen focal point, now with a glassmorphism halo */}
       <div
         style={{
           flex: 1,
@@ -251,15 +219,30 @@ export default function LawyerDemoPage() {
       >
         <div
           style={{
-            width: "min(65vw, 220px)",
-            height: "min(65vw, 220px)",
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle at 30% 30%, #ffffff 0%, #cfe8ff 25%, #7ec3f5 55%, #3d8fe0 80%, #2166b5 100%)",
+            width: "min(60vw, 200px)",
+            height: "min(60vw, 200px)",
+            borderRadius: "40% 60% 55% 45% / 50% 45% 55% 50%",
+            background: "rgba(120,170,240,0.10)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            border: "1px solid rgba(180,210,255,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             animation: orbAnimation,
-            boxShadow: "0 0 60px rgba(80,160,240,0.5)",
           }}
-        />
+        >
+          <div
+            style={{
+              width: "min(35vw, 115px)",
+              height: "min(35vw, 115px)",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 30% 30%, #ffffff 0%, #cfe8ff 25%, #7ec3f5 55%, #3d8fe0 80%, #2166b5 100%)",
+              boxShadow: "0 0 70px rgba(80,160,240,0.6)",
+            }}
+          />
+        </div>
       </div>
 
       {error && (
@@ -309,6 +292,65 @@ export default function LawyerDemoPage() {
         >
           ✕
         </button>
+      </div>
+
+      {/* WhatsApp number — moved to the bottom, always visible, explicit confirm */}
+      <div style={{ padding: "0 20px 20px" }}>
+        {!phoneConfirmed ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={demoPhone}
+              onChange={(e) => setDemoPhone(e.target.value)}
+              placeholder="WhatsApp number, e.g. 27821234567"
+              inputMode="numeric"
+              style={{
+                flex: 1,
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid #2a4a7a",
+                background: "#0d2140",
+                color: "#f0f4fa",
+                fontSize: 15,
+              }}
+            />
+            <button
+              onClick={() => demoPhone.trim() && setPhoneConfirmed(true)}
+              disabled={!demoPhone.trim()}
+              style={{
+                padding: "0 18px",
+                borderRadius: 10,
+                border: "none",
+                background: demoPhone.trim() ? "#3d8fe0" : "#1e3a63",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: demoPhone.trim() ? "pointer" : "default",
+              }}
+            >
+              Set
+            </button>
+          </div>
+        ) : (
+          <div
+            onClick={() => setPhoneConfirmed(false)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "#0f2a1f",
+              border: "1px solid #1e5c3f",
+              cursor: "pointer",
+              width: "fit-content",
+              margin: "0 auto",
+            }}
+          >
+            <span style={{ fontSize: 14 }}>✅</span>
+            <span style={{ fontSize: 14, color: "#8fe0b8" }}>{demoPhone}</span>
+            <span style={{ fontSize: 12, color: "#5a9c7c", marginLeft: 4 }}>tap to edit</span>
+          </div>
+        )}
       </div>
 
       {/* Live actions panel */}
