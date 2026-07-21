@@ -20,6 +20,7 @@ export default function LawyerDemoPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [phoneConfirmed, setPhoneConfirmed] = useState(false);
 
@@ -43,35 +44,39 @@ export default function LawyerDemoPage() {
     window.speechSynthesis.speak(utterance);
   }, []);
 
-  const triggerActionBeat = useCallback(async () => {
-    setPhase("action");
-    setShowActions(true);
+  const triggerActionBeat = useCallback(
+    async (topic: "asylum_permit" | "citizenship") => {
+      setPhase("action");
+      setShowActions(true);
+      setWhatsappStatus("sending");
+      setEmailDraft(null);
 
-    setWhatsappStatus("sending");
-    try {
-      const res = await fetch(`${API_URL}/demo/send-checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: demoPhone || undefined }),
-      });
-      const data = await res.json();
-      setWhatsappStatus(data.status === "sent" ? "sent" : "error");
-    } catch {
-      setWhatsappStatus("error");
-    }
+      try {
+        const res = await fetch(`${API_URL}/demo/send-checklist`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone_number: demoPhone || undefined, topic }),
+        });
+        const data = await res.json();
+        setWhatsappStatus(data.status === "sent" ? "sent" : "error");
+      } catch {
+        setWhatsappStatus("error");
+      }
 
-    try {
-      const res = await fetch(`${API_URL}/demo/draft-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.subject && data.body) setEmailDraft({ subject: data.subject, body: data.body });
-    } catch {}
+      try {
+        const res = await fetch(`${API_URL}/demo/draft-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic }),
+        });
+        const data = await res.json();
+        if (data.subject && data.body) setEmailDraft({ subject: data.subject, body: data.body });
+      } catch {}
 
-    setPhase("done");
-  }, [demoPhone]);
+      setPhase("idle");
+    },
+    [demoPhone]
+  );
 
   const sendToAgent = useCallback(
     async (text: string) => {
@@ -106,12 +111,9 @@ export default function LawyerDemoPage() {
       setTurns((prev) => [...prev, { role: "assistant", content: assistantText }]);
       setPhase("speaking");
 
-      speak(assistantText, () => {
-        if (userTurnCountRef.current >= 2) triggerActionBeat();
-        else setPhase("idle");
-      });
+      speak(assistantText, () => setPhase("idle"));
     },
-    [turns, speak, triggerActionBeat]
+    [turns, speak]
   );
 
   useEffect(() => {
@@ -123,14 +125,24 @@ export default function LawyerDemoPage() {
     }
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      if (transcript) sendToAgent(transcript);
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += transcript;
+        else interim += transcript;
+      }
+      setLiveTranscript(final || interim);
+      if (final) sendToAgent(final);
     };
-    recognition.onerror = () => setPhase("idle");
+    recognition.onerror = (e: any) => {
+      setError(e?.error === "no-speech" ? "Didn't catch that — tap and try again." : "Mic error — tap and try again.");
+      setPhase("idle");
+    };
     recognition.onend = () => setPhase((p) => (p === "listening" ? "idle" : p));
 
     recognitionRef.current = recognition;
@@ -140,6 +152,7 @@ export default function LawyerDemoPage() {
   const startListening = () => {
     if (!recognitionRef.current || phase !== "idle") return;
     setError(null);
+    setLiveTranscript("");
     setPhase("listening");
     recognitionRef.current.start();
   };
@@ -199,6 +212,10 @@ export default function LawyerDemoPage() {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.08); }
         }
+        @keyframes recDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.3; transform: scale(0.7); }
+        }
       `}</style>
 
       {/* Header — title/subtitle, matching the reference layout's top text */}
@@ -212,11 +229,52 @@ export default function LawyerDemoPage() {
         style={{
           flex: 1,
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
+          gap: 20,
           minHeight: 320,
+          padding: "0 24px",
         }}
       >
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: 0.5,
+            color:
+              phase === "listening"
+                ? "#ff6b6b"
+                : phase === "thinking"
+                ? "#ffd166"
+                : phase === "speaking"
+                ? "#7ec3f5"
+                : "#5a7ba8",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {phase === "listening" && (
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#ff6b6b",
+                display: "inline-block",
+                animation: "recDot 1s ease-in-out infinite",
+              }}
+            />
+          )}
+          {phase === "idle" && "Tap the mic to speak"}
+          {phase === "listening" && "Listening — recording now"}
+          {phase === "thinking" && "Kommune is thinking…"}
+          {phase === "speaking" && "Kommune is speaking…"}
+          {phase === "action" && "Sending real actions…"}
+          {phase === "done" && "Tap the mic to continue"}
+        </div>
+
         <div
           style={{
             width: "min(60vw, 200px)",
@@ -243,6 +301,25 @@ export default function LawyerDemoPage() {
             }}
           />
         </div>
+
+        {/* Live transcript - visible proof the mic actually heard something */}
+        {liveTranscript && (phase === "listening" || phase === "thinking") && (
+          <div
+            style={{
+              maxWidth: 320,
+              textAlign: "center",
+              fontSize: 15,
+              color: "#e0e8f5",
+              background: "rgba(120,170,240,0.08)",
+              border: "1px solid rgba(180,210,255,0.15)",
+              borderRadius: 12,
+              padding: "10px 16px",
+              fontStyle: "italic",
+            }}
+          >
+            "{liveTranscript}"
+          </div>
+        )}
       </div>
 
       {error && (
@@ -291,6 +368,44 @@ export default function LawyerDemoPage() {
           }}
         >
           ✕
+        </button>
+      </div>
+
+      {/* Action triggers — presenter chooses which matches the real conversation, never auto-fired */}
+      <div style={{ padding: "0 20px 16px", display: "flex", gap: 10 }}>
+        <button
+          onClick={() => triggerActionBeat("asylum_permit")}
+          disabled={phase === "action"}
+          style={{
+            flex: 1,
+            padding: "12px 10px",
+            borderRadius: 10,
+            border: "1px solid #2a4a7a",
+            background: "#122a4f",
+            color: "#cfe0f7",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Send Asylum Permit Checklist
+        </button>
+        <button
+          onClick={() => triggerActionBeat("citizenship")}
+          disabled={phase === "action"}
+          style={{
+            flex: 1,
+            padding: "12px 10px",
+            borderRadius: 10,
+            border: "1px solid #2a4a7a",
+            background: "#122a4f",
+            color: "#cfe0f7",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Send Citizenship Checklist
         </button>
       </div>
 
