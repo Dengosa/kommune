@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Mic } from "lucide-react";
 import { AnimatedSphere } from "./animated-sphere";
 
 const words = ["people", "families", "you", "everyone"];
@@ -135,6 +135,16 @@ return (
               className="h-14 px-8 text-base rounded-full border-foreground/20 hover:bg-foreground/5"
             >
               <Link href="/pathways">See How It Works</Link>
+            </Button>
+            <Button asChild
+              size="lg"
+              variant="ghost"
+              className="h-14 px-8 text-base rounded-full hover:bg-foreground/5"
+            >
+              <Link href="/talk-to-kommune">
+                <Mic className="w-4 h-4 mr-2" />
+                Talk to Kommune
+              </Link>
             </Button>
           </div>
         </div>
