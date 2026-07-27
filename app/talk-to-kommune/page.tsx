@@ -1,396 +1,259 @@
 "use client";
 
 /**
- * Kommune — Lawyer Demo (voice-wrapped, real backend)
+ * Kommune — "Talk to Kommune" value explainer + real paywall
  *
- * SCRIPTED FLOW, REAL ACTIONS:
- * - Speech-to-text and text-to-speech are browser-native (Web Speech API) —
- *   not Deepgram/ElevenLabs. That pipeline is still being built separately.
- * - Every agent response comes from the real, live /chat/stream backend.
- *   Nothing about the conversation content is scripted or faked.
- * - After the 2nd real user turn, this page triggers ONE scripted action
- *   beat: a real WhatsApp send (POST /demo/send-checklist) and a real
- *   drafted email shown on screen (POST /demo/draft-email). Both hit real
- *   backend endpoints using the same tools that power production.
- *
- * This is deliberately NOT a general-purpose "agent decides what to do"
- * system — for a live demo in front of lawyers, a guaranteed, rehearsed
- * trigger point is more trustworthy than letting the model decide live
- * whether to fire a real action.
+ * Three screens explaining value, then a genuine gate: voice only unlocks
+ * after real activation (reusing the existing /activate/request flow),
+ * not a free-for-anyone button. This matters because voice has real
+ * per-minute costs (Deepgram + ElevenLabs) unlike text chat.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { streamKommuneChat, type KommuneState } from "@/lib/api";
+import { useState } from "react";
+import { requestActivation } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Phase = "idle" | "listening" | "thinking" | "speaking" | "action" | "done";
+type Screen = 0 | 1 | 2 | 3;
 
-type Turn = {
-  role: "user" | "assistant";
-  content: string;
-};
+const SLIDES = [
+  {
+    title: "Meet Kommune",
+    body: "A voice you can actually talk to — about your legal status, your documents, your next step. Real answers, not a script.",
+  },
+  {
+    title: "It listens and responds in real time",
+    body: "Speak naturally. Kommune understands, thinks, and replies out loud — like a conversation, not a search bar.",
+  },
+  {
+    title: "It can take real action",
+    body: "Draft a real email. Send a real WhatsApp checklist. Kommune doesn't just talk — it helps you get things done.",
+  },
+];
 
-export default function LawyerDemoPage() {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [liveTranscript, setLiveTranscript] = useState("");
+export default function TalkToKommunePage() {
+  const [screen, setScreen] = useState<Screen>(0);
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activationInfo, setActivationInfo] = useState<{
+    reference: string;
+    amount_zar: number;
+    qr_code_url: string;
+    instructions: string;
+  } | null>(null);
 
-  const [whatsappStatus, setWhatsappStatus] = useState<
-    "idle" | "sending" | "sent" | "error"
-  >("idle");
-  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
-  const [demoPhone, setDemoPhone] = useState("");
-
-  const recognitionRef = useRef<any>(null);
-  const userTurnCountRef = useRef(0);
-
-  // --- Speak text aloud using the browser's built-in TTS ---
-  const speak = useCallback((text: string, onDone?: () => void) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      onDone?.();
+  const handleActivate = async () => {
+    if (!email && !whatsapp) {
+      setError("Enter an email or WhatsApp number to continue.");
       return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.onend = () => onDone?.();
-    utterance.onerror = () => onDone?.();
-    window.speechSynthesis.speak(utterance);
-  }, []);
-
-  // --- Trigger the scripted action beat (real WhatsApp + real drafted email) ---
-  const triggerActionBeat = useCallback(async () => {
-    setPhase("action");
-
-    setWhatsappStatus("sending");
-    try {
-      const res = await fetch(`${API_URL}/demo/send-checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: demoPhone || undefined }),
-      });
-      const data = await res.json();
-      setWhatsappStatus(data.status === "sent" ? "sent" : "error");
-    } catch {
-      setWhatsappStatus("error");
-    }
-
-    try {
-      const res = await fetch(`${API_URL}/demo/draft-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.subject && data.body) {
-        setEmailDraft({ subject: data.subject, body: data.body });
-      }
-    } catch {
-      // silent — the checklist send is the primary proof point, email is bonus
-    }
-
-    setPhase("done");
-  }, [demoPhone]);
-
-  // --- Send a completed user utterance to the real backend ---
-  const sendToAgent = useCallback(
-    async (text: string) => {
-      if (!text.trim()) {
-        setPhase("idle");
-        return;
-      }
-
-      setPhase("thinking");
-      const nextTurns: Turn[] = [...turns, { role: "user", content: text }];
-      setTurns(nextTurns);
-      userTurnCountRef.current += 1;
-
-      let assistantText = "";
-
-      try {
-        for await (const chunk of streamKommuneChat(
-          {
-            message: text,
-            history: nextTurns.map((t) => ({ role: t.role, content: t.content })),
-            session_id: "lawyer-demo",
-          },
-          undefined
-        )) {
-          const delta =
-            (chunk as KommuneState)?.delta ?? "";
-          if (typeof delta === "string") assistantText += delta;
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-        setPhase("idle");
-        return;
-      }
-
-      setTurns((prev) => [...prev, { role: "assistant", content: assistantText }]);
-      setPhase("speaking");
-
-      speak(assistantText, () => {
-        if (userTurnCountRef.current >= 2) {
-          triggerActionBeat();
-        } else {
-          setPhase("idle");
-        }
-      });
-    },
-    [turns, speak, triggerActionBeat]
-  );
-
-  // --- Set up browser speech recognition once ---
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setError("This browser doesn't support voice input. Use Chrome or Edge for the demo.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      let final = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) final += transcript;
-        else interim += transcript;
-      }
-      setLiveTranscript(final || interim);
-      if (final) {
-        recognition.stop();
-        sendToAgent(final);
-      }
-    };
-
-    recognition.onerror = () => {
-      setPhase("idle");
-    };
-
-    recognition.onend = () => {
-      setPhase((p) => (p === "listening" ? "idle" : p));
-    };
-
-    recognitionRef.current = recognition;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendToAgent]);
-
-  const startListening = () => {
-    if (!recognitionRef.current) return;
     setError(null);
-    setLiveTranscript("");
-    setPhase("listening");
-    recognitionRef.current.start();
-  };
-
-  const phaseLabel: Record<Phase, string> = {
-    idle: "Tap to speak",
-    listening: "Listening…",
-    thinking: "Kommune is thinking…",
-    speaking: "Kommune is speaking…",
-    action: "Sending real WhatsApp + drafting email…",
-    done: "Demo complete",
+    setLoading(true);
+    try {
+      const result = await requestActivation({
+        email: email || undefined,
+        whatsapp_number: whatsapp || undefined,
+      });
+      setActivationInfo(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div
       style={{
-        minHeight: "100vh",
-        background: "#0f0f0f",
-        color: "#f5f5f5",
-        fontFamily: "'DM Sans', system-ui, sans-serif",
+        minHeight: "100dvh",
+        width: "100%",
+        maxWidth: 480,
+        margin: "0 auto",
+        background: "linear-gradient(180deg, #dce6fb 0%, #e8eefb 55%, #ffffff 100%)",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        padding: "48px 24px",
+        fontFamily: "'Poppins', 'Quicksand', system-ui, -apple-system, sans-serif",
+        padding: "40px 24px",
+        boxSizing: "border-box",
       }}
     >
-      <div style={{ maxWidth: 560, width: "100%" }}>
-        <div style={{ marginBottom: 40, textAlign: "center" }}>
+      {/* Progress dots */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 40 }}>
+        {[0, 1, 2, 3].map((i) => (
           <div
+            key={i}
             style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 12,
-              letterSpacing: 2,
-              color: "#b8ff57",
-              marginBottom: 8,
-            }}
-          >
-            KOMMUNE — LIVE DEMO
-          </div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>
-            Speak to Kommune
-          </h1>
-        </div>
-
-        {/* Demo phone number input (for the WhatsApp send target) */}
-        <div style={{ marginBottom: 24 }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: 12,
-              fontFamily: "'IBM Plex Mono', monospace",
-              color: "#999",
-              marginBottom: 6,
-            }}
-          >
-            WhatsApp number for this demo (E.164, no +, e.g. 27821234567)
-          </label>
-          <input
-            type="text"
-            value={demoPhone}
-            onChange={(e) => setDemoPhone(e.target.value)}
-            placeholder="27821234567"
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #333",
-              background: "#1a1a1a",
-              color: "#f5f5f5",
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 14,
+              width: i === screen ? 24 : 8,
+              height: 8,
+              borderRadius: 4,
+              background: i === screen ? "#4a7fe8" : "#c8d6f2",
+              transition: "all 0.2s ease",
             }}
           />
-        </div>
+        ))}
+      </div>
 
-        {/* Mic button */}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-          <button
-            onClick={startListening}
-            disabled={phase !== "idle" && phase !== "listening"}
-            style={{
-              width: 120,
-              height: 120,
-              borderRadius: "50%",
-              border: "none",
-              background:
-                phase === "listening"
-                  ? "#b8ff57"
-                  : phase === "idle"
-                  ? "#1a1a1a"
-                  : "#2a2a2a",
-              color: phase === "listening" ? "#0f0f0f" : "#f5f5f5",
-              fontSize: 32,
-              cursor: phase === "idle" ? "pointer" : "default",
-              transition: "all 0.2s ease",
-              boxShadow: phase === "listening" ? "0 0 0 8px rgba(184,255,87,0.15)" : "none",
-            }}
-          >
-            🎙️
-          </button>
-        </div>
-
-        <div
-          style={{
-            textAlign: "center",
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 13,
-            color: "#999",
-            marginBottom: 32,
-          }}
-        >
-          {phaseLabel[phase]}
-        </div>
-
-        {liveTranscript && phase === "listening" && (
-          <div style={{ textAlign: "center", fontStyle: "italic", color: "#ccc", marginBottom: 24 }}>
-            "{liveTranscript}"
-          </div>
-        )}
-
-        {error && (
-          <div style={{ color: "#ff6b6b", fontSize: 13, textAlign: "center", marginBottom: 24 }}>
-            {error}
-          </div>
-        )}
-
-        {/* Conversation log */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
-          {turns.map((t, i) => (
-            <div
-              key={i}
-              style={{
-                alignSelf: t.role === "user" ? "flex-end" : "flex-start",
-                maxWidth: "85%",
-                padding: "10px 14px",
-                borderRadius: 12,
-                background: t.role === "user" ? "#b8ff57" : "#1a1a1a",
-                color: t.role === "user" ? "#0f0f0f" : "#f5f5f5",
-                fontSize: 14,
-                lineHeight: 1.5,
-              }}
-            >
-              {t.content}
-            </div>
-          ))}
-        </div>
-
-        {/* Action beat: real WhatsApp + real drafted email */}
-        {(whatsappStatus !== "idle" || emailDraft) && (
+      {/* Screens 0-2: value explainer */}
+      {screen < 3 && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center" }}>
           <div
             style={{
-              borderTop: "1px solid #333",
-              paddingTop: 24,
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
+              width: 90,
+              height: 90,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, rgba(207,232,255,0.7) 25%, rgba(126,195,245,0.55) 55%, rgba(61,143,224,0.45) 100%)",
+              backdropFilter: "blur(8px)",
+              margin: "0 auto 32px",
+              boxShadow: "0 8px 40px rgba(74,127,232,0.3)",
+            }}
+          />
+          <h1 style={{ fontSize: 24, fontWeight: 600, color: "#2b3a6b", marginBottom: 16 }}>
+            {SLIDES[screen].title}
+          </h1>
+          <p style={{ fontSize: 15, color: "#5a6a9a", lineHeight: 1.6 }}>{SLIDES[screen].body}</p>
+        </div>
+      )}
+
+      {/* Screen 3: the actual gate - real activation, not a free unlock */}
+      {screen === 3 && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          {!activationInfo ? (
+            <>
+              <h1 style={{ fontSize: 22, fontWeight: 600, color: "#2b3a6b", marginBottom: 8, textAlign: "center" }}>
+                Activate to start talking
+              </h1>
+              <p style={{ fontSize: 14, color: "#5a6a9a", textAlign: "center", marginBottom: 28 }}>
+                A once-off R300 unlocks voice, plus every Kommune agent, your Vault, and a free pass for someone else.
+              </p>
+
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #d8e2f5",
+                  background: "#ffffff",
+                  fontSize: 15,
+                  marginBottom: 10,
+                }}
+              />
+              <input
+                type="text"
+                placeholder="WhatsApp number (optional)"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                inputMode="numeric"
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #d8e2f5",
+                  background: "#ffffff",
+                  fontSize: 15,
+                  marginBottom: 16,
+                }}
+              />
+
+              {error && (
+                <p style={{ color: "#c0392b", fontSize: 13, textAlign: "center", marginBottom: 12 }}>{error}</p>
+              )}
+
+              <button
+                onClick={handleActivate}
+                disabled={loading}
+                style={{
+                  padding: "14px",
+                  borderRadius: 30,
+                  border: "none",
+                  background: "linear-gradient(135deg, #4a7fe8, #6a9ff0)",
+                  color: "#fff",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: loading ? "default" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? "Setting up…" : "Activate for R300"}
+              </button>
+            </>
+          ) : (
+            <div style={{ textAlign: "center" }}>
+              <h1 style={{ fontSize: 20, fontWeight: 600, color: "#2b3a6b", marginBottom: 16 }}>
+                Almost there
+              </h1>
+              {activationInfo.qr_code_url && (
+                <img
+                  src={activationInfo.qr_code_url}
+                  alt="Payment QR code"
+                  style={{ width: 180, height: 180, margin: "0 auto 16px", borderRadius: 12 }}
+                />
+              )}
+              <p style={{ fontSize: 14, color: "#2b3a6b", marginBottom: 8 }}>{activationInfo.instructions}</p>
+              <p style={{ fontSize: 12, color: "#8fa0c8" }}>Reference: {activationInfo.reference}</p>
+              <p style={{ fontSize: 12, color: "#8fa0c8", marginTop: 16 }}>
+                Once payment is confirmed, you'll get access to voice within 24 hours.
+              </p>
+              <a
+                href="https://kommune-voice.vercel.app"
+                style={{
+                  display: "inline-block",
+                  marginTop: 24,
+                  padding: "12px 28px",
+                  borderRadius: 30,
+                  background: "linear-gradient(135deg, #4a7fe8, #6a9ff0)",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Go to Kommune Voice →
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Navigation */}
+      {screen < 3 && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+          <button
+            onClick={() => setScreen((s) => Math.max(0, s - 1) as Screen)}
+            style={{
+              padding: "10px 20px",
+              borderRadius: 30,
+              border: "none",
+              background: "transparent",
+              color: screen === 0 ? "transparent" : "#5a6a9a",
+              fontSize: 14,
+              cursor: screen === 0 ? "default" : "pointer",
             }}
           >
-            <div
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 12,
-                letterSpacing: 1,
-                color: "#b8ff57",
-              }}
-            >
-              LIVE ACTIONS
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                borderRadius: 10,
-                background: "#1a1a1a",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <span style={{ fontSize: 20 }}>
-                {whatsappStatus === "sending" ? "⏳" : whatsappStatus === "sent" ? "✅" : "⚠️"}
-              </span>
-              <span style={{ fontSize: 14 }}>
-                {whatsappStatus === "sending" && "Sending checklist to WhatsApp…"}
-                {whatsappStatus === "sent" && "Checklist sent — check the phone in the room."}
-                {whatsappStatus === "error" && "WhatsApp send failed — check server logs."}
-              </span>
-            </div>
-
-            {emailDraft && (
-              <div style={{ padding: 16, borderRadius: 10, background: "#1a1a1a" }}>
-                <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>DRAFTED EMAIL</div>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>{emailDraft.subject}</div>
-                <div style={{ fontSize: 14, color: "#ccc", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                  {emailDraft.body}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+            Back
+          </button>
+          <button
+            onClick={() => setScreen((s) => (s + 1) as Screen)}
+            style={{
+              padding: "12px 28px",
+              borderRadius: 30,
+              border: "none",
+              background: "linear-gradient(135deg, #4a7fe8, #6a9ff0)",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(74,127,232,0.25)",
+            }}
+          >
+            {screen === 2 ? "Continue" : "Next"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
